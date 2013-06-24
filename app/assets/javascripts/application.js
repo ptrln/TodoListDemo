@@ -14,3 +14,59 @@
 //= require jquery_ujs
 //= require underscore
 //= require_tree .
+
+function TodoList(params) {
+  this.setAttributes(params);
+}
+
+TodoList.fetch = function (callback) {
+  $.ajax({
+    url: "/todo_lists.json",
+    type: "get",
+    success: function (todoListParams) {
+      var todoLists = _(todoListParams).map(function (todoListParam) {
+        return new TodoList(todoListParam);
+      });
+
+      callback(todoLists);
+    }
+  });  
+}
+
+TodoList.prototype.asJSON = function () {
+  return { id: this.id, title: this.title };
+}
+
+TodoList.prototype.setAttributes = function (params) {
+  var that = this;
+  _(params).each(function (value, key) {
+    that[key] = value;
+  });
+}
+
+TodoList.prototype.update = function (callback) {
+  var that = this;
+
+  $.ajax({
+    url: "/todo_lists/" + this.id + ".json",
+    type: "put",
+    data: {
+      todo_list: that.asJSON()
+    },
+    success: function (updatedParams) {
+      that.setAttributes(updatedParams);
+
+      callback();
+    }
+  });
+}
+
+$(function () {
+  TodoList.fetch(function (todoLists) {
+    var $ul = $("#todo-lists");
+    _(todoLists).each(function (todoList) {
+      var $li = $("<li></li>").text(todoList.title);
+      $ul.append($li);
+    });
+  });
+});
