@@ -15,36 +15,75 @@
 //= require underscore
 //= require_tree .
 
-function TodoList(params) {
-  this.setAttributes(params);
+var App = {};
+
+App.Models = {};
+
+App.Models.TodoList = function (attrs) {
+  this.setAttributes(attrs);
 }
 
-TodoList.fetch = function (callback) {
+App.Models.TodoList.fetch = function (callback) {
   $.ajax({
     url: "/todo_lists.json",
     type: "get",
     success: function (todoListParams) {
-      var todoLists = _(todoListParams).map(function (todoListParam) {
-        return new TodoList(todoListParam);
-      });
+      App.Models.TodoList._all =
+        _(todoListParams).map(function (todoListParam) {
+          return new App.Models.TodoList(todoListParam);
+        });
 
-      callback(todoLists);
+      callback(App.Models.TodoList._all);
     }
-  });  
-}
+  });
+};
 
-TodoList.prototype.asJSON = function () {
+App.Models.TodoList.find = function (id) {
+  return _(App.Models.TodoList._all).findWhere({ id: id });
+};
+
+App.Models.TodoList.prototype.addItem = function (encodedItem, callback) {
+  var that = this;
+  $.ajax({
+    url: "/todo_lists/" + that.id + "/todo_items.json",
+    type: "post",
+    data: encodedItem,
+    success: function (todoItemAttrs) {
+      that.items.push(todoItemAttrs);
+      
+      if (callback) {
+        callback(todoItemAttrs);
+      }
+    }
+  });
+};
+
+App.Models.TodoList.prototype.asJSON = function () {
   return { id: this.id, title: this.title };
 }
 
-TodoList.prototype.setAttributes = function (params) {
+App.Models.TodoList.prototype.fetchItems = function (callback) {
+  var that = this;
+  $.ajax({
+    url: "/todo_lists/" + that.id + "/todo_items.json",
+    type: "get",
+    success: function (todoItems) {
+      // TODO: Could we parse todoItems to a TodoItem class?
+      that.items = todoItems;
+      
+      callback(that.items);
+    }
+  });
+};
+
+App.Models.TodoList.prototype.setAttributes = function (params) {
   var that = this;
   _(params).each(function (value, key) {
     that[key] = value;
   });
-}
+};
 
-TodoList.prototype.update = function (callback) {
+App.Models.TodoList.prototype.update = function (callback) {
   var that = this;
 
   $.ajax({
@@ -59,14 +98,68 @@ TodoList.prototype.update = function (callback) {
       callback();
     }
   });
+};
+
+App.Views = {};
+
+App.Views.TodoListsIndexView = function (todoLists) {
+  this.todoLists = todoLists;
+  this.$el = $("<div></div>");
+};
+
+App.Views.TodoListsIndexView.prototype.render = function () {
+  var templateFn = _.template($("#todo-lists-template").html());
+  var renderedContent = templateFn({ todoLists: this.todoLists });
+  
+  this.$el.html(renderedContent);
+  this.installClickHandlers();
+
+  return this.$el;
+};
+
+App.Views.TodoListsIndexView.prototype.installClickHandlers = function () {
+  this.$el.find("a.todo-list").on("click", function (event) {
+    event.preventDefault();
+
+    var id = parseInt($(this).attr("data-id"));
+    var todoList = App.Models.TodoList.find(id);
+
+    todoList.fetchItems(function () {
+      var todoListView = new App.Views.TodoListView(todoList);
+      $("#content").html(todoListView.render());
+    });
+  });  
+};
+
+App.Views.TodoListView = function (todoList) {
+  this.todoList = todoList;
+  this.$el = $("<div></div>");
+};
+
+App.Views.TodoListView.prototype.render = function () {
+  var templateFn = _.template($("#todo-list-template").html());
+
+  this.$el.html(templateFn({ todoList: this.todoList }));
+  this.installHandlers();
+
+  return this.$el;
+};
+
+App.Views.TodoListView.prototype.installHandlers = function () {
+  var that = this;
+
+  this.$el.find('input[type="submit"]').on("click", function (event) {
+    event.preventDefault();
+
+    that.todoList.addItem($(this.form).serialize(), function (newItemAttrs) {
+      that.render();
+    });
+  });
 }
 
 $(function () {
-  TodoList.fetch(function (todoLists) {
-    var $ul = $("#todo-lists");
-    _(todoLists).each(function (todoList) {
-      var $li = $("<li></li>").text(todoList.title);
-      $ul.append($li);
-    });
+  App.Models.TodoList.fetch(function (todoLists) {
+    var indexView = new App.Views.TodoListsIndexView(todoLists);
+    $("#content").html(indexView.render());
   });
 });

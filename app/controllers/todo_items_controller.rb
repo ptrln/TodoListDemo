@@ -1,7 +1,8 @@
 class TodoItemsController < ApplicationController
   def create
-    @todo_item = TodoItem.create!(
-      ({ :todo_list_id => params[:todo_list_id] }).merge(params[:todo_item])
+    @todo_list = TodoList.find(params[:todo_list_id])
+    @todo_item = @todo_list.todo_items.create!(
+      params[:todo_item]
     )
     
     render :json => @todo_item
